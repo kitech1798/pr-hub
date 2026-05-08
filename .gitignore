@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Streamlit secrets (혹시 추후 추가될 경우 안전망)
+.streamlit/secrets.toml
+
+# 수집 원본 / 임시 산출물 — 앱은 data/허브-데이터셋.csv만 읽음
+raw/
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 로그
+*.log
