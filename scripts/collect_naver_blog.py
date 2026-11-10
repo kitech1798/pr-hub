@@ -168,8 +168,11 @@ def save_dataset(records: dict[tuple[str, str], dict]) -> None:
             writer.writerow({k: row.get(k, "") for k in CSV_FIELDS})
 
 
-def crawl_listing(session, max_pages: int | None) -> list[dict]:
-    """전체 목록을 끝까지 수집(페이지에서 0건 나오면 중단)."""
+def crawl_listing(session, max_pages: int | None, known_ids: frozenset = frozenset()) -> list[dict]:
+    """전체 목록을 끝까지 수집(페이지에서 0건 나오면 중단).
+
+    known_ids가 주어지면(증분 모드) 한 페이지가 전부 이미 가진 글일 때 멈춘다 — 목록은 최신순이다.
+    """
     listing: list[dict] = []
     seen_ids: set[str] = set()
     total = None
@@ -197,6 +200,8 @@ def crawl_listing(session, max_pages: int | None) -> list[dict]:
                 pbar.update(1)
         if not items or new_count == 0:
             break
+        if known_ids and all(it["id"] in known_ids for it in items):
+            break
         page += 1
     if pbar:
         pbar.close()
@@ -222,12 +227,15 @@ def inspect() -> None:
             print(f"  [본문] summary={d['summary'][:150]}")
 
 
-def collect(max_pages: int | None) -> None:
+def collect(max_pages: int | None, incremental: bool = False) -> None:
     session = make_session()
-    listing = crawl_listing(session, max_pages)
-    print(f"[블로그] 목록에서 {len(listing)}건 수집(dedup 후)")
-
     records = load_existing()
+    known = frozenset(i for (ch, i) in records if ch == CHANNEL) if incremental else frozenset()
+    listing = crawl_listing(session, max_pages, known)
+    if incremental:  # 새 글과 날짜·요약이 비어 있던 글만 본문을 다시 연다
+        listing = [it for it in listing
+                   if not (p := records.get((CHANNEL, it["id"]))) or not p.get("게시일") or not p.get("주요내용")]
+    print(f"[블로그] 목록에서 {len(listing)}건 처리(dedup{' · 증분' if incremental else ''})")
 
     for item in tqdm(listing, desc="블로그 본문"):
         view_url = VIEW_URL.format(blog_id=BLOG_ID, log_no=item["id"])
@@ -263,11 +271,12 @@ def main():
     p.add_argument("--pages", type=int, default=None,
                    help="최대 목록 페이지 수 (생략 시 전체). 1페이지=30건")
     p.add_argument("--inspect", action="store_true", help="첫 페이지 + 1건 본문 점검")
+    p.add_argument("--incremental", action="store_true", help="새 글만 본문 수집(주간 갱신용)")
     args = p.parse_args()
     if args.inspect:
         inspect()
     else:
-        collect(args.pages)
+        collect(args.pages, incremental=args.incremental)
 
 
 if __name__ == "__main__":

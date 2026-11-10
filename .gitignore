@@ -26,3 +26,6 @@ desktop.ini
 
 # 로그
 *.log
+
+# 주간 자동 갱신 로그
+logs/

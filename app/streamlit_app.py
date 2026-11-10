@@ -5,11 +5,13 @@
 
 탭 구성:
     📊 대시보드  — 채널별·연도별·월별 통계와 차트
+    📈 보도성과  — 보도자료별 보도 매체·기사 수(보도자료 성과분석이 주 1회 내보냄)
     🔍 통합검색 — 4채널 동시 검색·필터·정렬
     채널별 4탭   — 보도자료 / 포토뉴스 / 유튜브 / 블로그 리스트
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -18,7 +20,12 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "허브-데이터셋.csv"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATA_PATH = DATA_DIR / "허브-데이터셋.csv"
+# 보도자료 성과분석(별도 프로젝트)이 주 1회 내보내는 집계 — scripts/hub_guard.py import-perf 가 검사 후 복사
+PERF_PATH = DATA_DIR / "보도성과.csv"
+PERF_MEDIA_PATH = DATA_DIR / "보도성과_매체.csv"
+PERF_META_PATH = DATA_DIR / "보도성과_meta.json"
 CHANNELS = ["보도자료", "포토뉴스", "유튜브", "블로그"]
 
 # 미드나잇 + 시안 팔레트
@@ -155,6 +162,33 @@ def load_data() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=30)
+def load_perf() -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """(보도자료별, 매체별, meta). 파일이 없으면 빈 값 — 탭이 안내 화면을 띄운다."""
+    if not PERF_PATH.exists():
+        return pd.DataFrame(), pd.DataFrame(), {}
+    perf = pd.read_csv(PERF_PATH, encoding="utf-8-sig", dtype={"id": str})
+    perf["배포일"] = pd.to_datetime(perf["배포일"], errors="coerce")
+    for c in ("매체명", "등급별 매체 수", "집계 상태", "제목", "링크"):
+        perf[c] = perf[c].fillna("").astype(str)
+    media = pd.read_csv(PERF_MEDIA_PATH, encoding="utf-8-sig") if PERF_MEDIA_PATH.exists() else pd.DataFrame()
+    meta = json.loads(PERF_META_PATH.read_text(encoding="utf-8")) if PERF_META_PATH.exists() else {}
+    return perf, media, meta
+
+
+def perf_badge(row_id: str) -> str:
+    """보도자료 카드에 붙일 '매체 N곳 · 기사 M건' 칩(성과 데이터가 없으면 빈 문자열)."""
+    p = PERF_BY_ID.get(str(row_id))
+    if not p:
+        return ""
+    pending = " · 집계 중" if str(p["집계 상태"]).startswith("집계 중") else ""
+    return (
+        f"<span style='display:inline-block;padding:2px 10px;border-radius:999px;"
+        f"background:rgba(34,211,238,0.10);color:{ACCENT};font-size:0.8rem;font-weight:600;"
+        f"font-variant-numeric:tabular-nums;'>보도 매체 {int(p['매체 수'])}곳 · 기사 {int(p['기사 수'])}건{pending}</span>"
+    )
+
+
 def style_fig(fig, height: int = 320):
     """모든 plotly figure 공통 — 다크 + 투명 배경 + 시안 그리드."""
     fig.update_layout(
@@ -172,6 +206,8 @@ def style_fig(fig, height: int = 320):
 
 
 df = load_data()
+perf, perf_media, perf_meta = load_perf()
+PERF_BY_ID = perf.set_index("id").to_dict("index") if not perf.empty else {}
 
 st.title("KITECH 홍보 허브")
 st.caption(
@@ -204,10 +240,14 @@ with st.sidebar:
         date_range = None
 
     st.divider()
-    st.caption(
-        f"마지막 데이터 갱신: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}\n"
-        "수집 후 새로고침을 누르면 항목이 갱신됩니다."
-    )
+    # 예전엔 '지금 시각'을 갱신일로 보여줬다 — 데이터가 언제 것인지 알 수 없어 실제 값으로 바꾼다
+    latest = {
+        ch: df.loc[df["채널"] == ch, "게시일"].max() for ch in CHANNELS
+    } if not df.empty else {}
+    lines = [f"- {ch}: {d:%Y-%m-%d}" for ch, d in latest.items() if pd.notna(d)]
+    st.caption("**채널별 최신 게시물**\n" + "\n".join(lines))
+    if perf_meta:
+        st.caption(f"**보도성과 기준일** {perf_meta.get('기준일', '-')} (매주 월요일 자동 갱신)")
 
 
 def apply_filters(
@@ -235,8 +275,8 @@ def apply_filters(
 
 
 # ── 탭 구성 ───────────────────────────────────────────────────
-tab_dash, tab_search, *channel_tabs = st.tabs(
-    ["📊 대시보드", "🔍 통합검색"] + [f"{c} ({len(df[df['채널'] == c]):,})" for c in CHANNELS]
+tab_dash, tab_perf, tab_search, *channel_tabs = st.tabs(
+    ["📊 대시보드", "📈 보도성과", "🔍 통합검색"] + [f"{c} ({len(df[df['채널'] == c]):,})" for c in CHANNELS]
 )
 
 # ── 📊 대시보드 ───────────────────────────────────────────────
@@ -393,6 +433,107 @@ with tab_dash:
                 st.caption("연도 데이터가 부족합니다.")
 
 
+# ── 📈 보도성과 ───────────────────────────────────────────────
+def filter_perf(src: pd.DataFrame) -> pd.DataFrame:
+    """사이드바 전역 검색어·기간을 보도성과에도 똑같이 적용(제목·매체명, 배포일)."""
+    out = src
+    if query:
+        m = (out["제목"].str.contains(query, case=False, regex=False)
+             | out["매체명"].str.contains(query, case=False, regex=False))
+        out = out[m]
+    if date_range and isinstance(date_range, tuple) and len(date_range) == 2:
+        d = out["배포일"].dt.date
+        out = out[(d >= date_range[0]) & (d <= date_range[1])]
+    return out
+
+
+with tab_perf:
+    if perf.empty:
+        st.info(
+            "보도성과 데이터가 아직 없습니다. 매주 월요일 자동 갱신 뒤에 표시됩니다.\n\n"
+            "수동으로 채우려면 `보도자료 성과분석` 폴더에서 주간 갱신을 실행한 뒤 "
+            "`python scripts/hub_guard.py import-perf`를 실행하세요."
+        )
+    else:
+        pf = filter_perf(perf)
+        st.caption(
+            f"기준일 {perf_meta.get('기준일', '-')} · 보도자료 {len(perf):,}건 중 필터 결과 {len(pf):,}건 "
+            "· 보도자료 1건이 네이버 뉴스에서 몇 개 매체에 실렸는지 자동 대조한 결과"
+        )
+        if pf.empty:
+            st.warning("필터 조건에 맞는 보도자료가 없습니다. 사이드바 검색어·기간을 넓혀 보세요.")
+        else:
+            settled = pf[pf["집계 상태"] == "확정"]
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("보도자료", f"{len(pf):,}건")
+            k2.metric("보도 기사", f"{int(pf['기사 수'].sum()):,}건")
+            k3.metric(
+                "건당 매체 수 (중앙값)",
+                f"{settled['매체 수'].median():.0f}곳" if not settled.empty else "-",
+                help="집계가 끝난(배포 60일 경과) 보도자료만 셉니다. 집계 중인 건은 숫자가 아직 늘어납니다.",
+            )
+            k4.metric(
+                "확인 대기 기사",
+                f"{int(pf['검토대기 기사'].sum()):,}건",
+                help="자동 대조 점수가 애매해 사람이 확인해야 하는 기사. 확인 전에는 위 숫자에 넣지 않습니다(하한값).",
+            )
+
+            c1, c2 = st.columns([3, 2])
+            with c1:
+                st.markdown("##### 보도자료별 보도 매체 수")
+                yr = settled.dropna(subset=["배포일"]).copy()
+                if not yr.empty:
+                    yr["연"] = yr["배포일"].dt.year.astype(str)
+                    by_year = yr.groupby("연")["매체 수"].median().reset_index()
+                    fig = px.bar(by_year, x="연", y="매체 수", text="매체 수",
+                                 color_discrete_sequence=[CHANNEL_COLORS["보도자료"]])
+                    fig.update_traces(texttemplate="%{text:.0f}곳", textposition="outside", cliponaxis=False)
+                    style_fig(fig, height=300)
+                    fig.update_layout(xaxis_title=None, yaxis_title="중앙값 (곳)", bargap=0.35)
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption("연도별 중앙값 — 집계가 끝난 보도자료만")
+                else:
+                    st.caption("집계가 끝난 보도자료가 아직 없습니다.")
+            with c2:
+                st.markdown("##### 자주 보도한 매체 Top 15")
+                names = [n for cell in pf["매체명"] for n in cell.split(", ") if n]
+                top = Counter(names).most_common(15)
+                if top:
+                    tdf = pd.DataFrame(top, columns=["매체", "보도한 보도자료 수"]).iloc[::-1]
+                    fig = px.bar(tdf, x="보도한 보도자료 수", y="매체", orientation="h",
+                                 text="보도한 보도자료 수", color_discrete_sequence=[ACCENT])
+                    fig.update_traces(textposition="outside", cliponaxis=False)
+                    style_fig(fig, height=300 + 8 * len(top))
+                    fig.update_layout(xaxis_title=None, yaxis_title=None, bargap=0.25)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.caption("보도 매체가 아직 없습니다.")
+
+            st.markdown("##### 보도자료별 성과")
+            only_open = st.toggle("집계 중인 보도자료만 (배포 60일 이내)", value=False)
+            table = pf[pf["집계 상태"].str.startswith("집계 중")] if only_open else pf
+            table = table.sort_values("배포일", ascending=False)
+            show = table[["배포일", "제목", "매체 수", "기사 수", "집계 상태", "매체명", "링크"]].copy()
+            show["배포일"] = show["배포일"].dt.strftime("%Y-%m-%d")
+            st.dataframe(
+                show, use_container_width=True, hide_index=True, height=min(640, 38 + 35 * max(len(show), 1)),
+                column_config={
+                    "매체 수": st.column_config.ProgressColumn(
+                        "매체 수", format="%d곳", min_value=0, max_value=int(perf["매체 수"].max() or 1)),
+                    "기사 수": st.column_config.NumberColumn("기사 수", format="%d건"),
+                    "매체명": st.column_config.TextColumn("보도 매체", width="large"),
+                    "링크": st.column_config.LinkColumn("원문", display_text="보도자료 →"),
+                },
+            )
+        with st.expander("집계 기준 · 한계"):
+            st.write(perf_meta.get("집계 기준", ""))
+            st.write(
+                "매체 등급·전체 매체별 집계는 아래 표와 같습니다(기간·검색 필터와 무관한 전체 기간)."
+            )
+            if not perf_media.empty:
+                st.dataframe(perf_media, use_container_width=True, hide_index=True, height=320)
+
+
 # ── 🔍 통합검색 ───────────────────────────────────────────────
 with tab_search:
     # 본문 검색창을 가장 위에 크게 — 사이드바와 별도로 작동(둘 다 입력하면 AND)
@@ -461,6 +602,8 @@ with tab_search:
                         )
                     with cols[2]:
                         st.markdown(f"#### {row['제목']}")
+                        if row["채널"] == "보도자료" and (badge := perf_badge(row["id"])):
+                            st.markdown(badge, unsafe_allow_html=True)
                         st.write(row.get("주요내용") or "")
                         if link:
                             st.markdown(f"[원문 보기 →]({link})")
@@ -508,6 +651,8 @@ for tab, channel in zip(channel_tabs, CHANNELS):
                     st.markdown(f"**{date_str}**")
                 with info_cols[1]:
                     st.markdown(f"#### {row['제목']}")
+                    if channel == "보도자료" and (badge := perf_badge(row["id"])):
+                        st.markdown(badge, unsafe_allow_html=True)
                     st.write(row.get("주요내용") or "")
                     if link:
                         st.markdown(f"[원문 보기 →]({link})")

@@ -55,6 +55,21 @@ KITECH 보도자료는 categoryId로 분리되어 있습니다.
 python scripts\collect_kitech.py --board press --categories 50,49
 ```
 
+## 4. 주간 자동 갱신 (매주 월요일 08:30)
+
+작업 스케줄러 `KITECH_홍보_주간갱신`이 `scripts\weekly_update.ps1`을 실행합니다.
+
+1. `..\보도자료 성과분석` 주간 갱신 → 보도성과 CSV 내보내기
+2. 4채널 증분 수집 (`--incremental`: 이미 가진 글만 나오는 페이지에서 멈추고 새 글만 상세 수집)
+3. `hub_guard.py import-perf`(보도성과 검사·복사) → `pytest tests`(앱 렌더 포함) → `hub_guard.py check`(채널 건수 5% 넘게 줄면 막음)
+4. 모두 통과하면 `data/` 커밋·푸시 → Streamlit Cloud 자동 반영
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\weekly_update.ps1 -NoPush   # 푸시 없이 시험
+Get-Content logs\last_status.txt                                            # 마지막 결과 한 줄
+Start-ScheduledTask -TaskName KITECH_홍보_주간갱신                            # 지금 한 번 돌리기
+```
+
 ## 산출 컬럼
 
 | 컬럼 | 설명 | v1 화면 노출 |

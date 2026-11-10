@@ -160,7 +160,8 @@ def inspect(board: str) -> None:
             print(f"  {k}: {v}")
 
 
-def _crawl_category(session, page_id, channel, category_id, max_pages, seen_ids, listing):
+def _crawl_category(session, page_id, channel, category_id, max_pages, seen_ids, listing, known_ids=frozenset()):
+    """known_ids가 주어지면(증분 모드) 한 페이지가 전부 이미 가진 글일 때 멈춘다 — 목록은 최신순이다."""
     label = f"category={category_id}" if category_id is not None else "no-category"
     first = fetch(session, list_url(page_id, 1, category_id))
     total = parse_total_count(first)
@@ -184,22 +185,33 @@ def _crawl_category(session, page_id, channel, category_id, max_pages, seen_ids,
             new_count += 1
         if new_count == 0:
             break
+        if known_ids and all(it["id"] in known_ids for it in page_items):
+            break
 
 
-def collect(board: str, max_pages: int | None, categories_override: list[int] | None = None) -> None:
+def needs_detail(item_id: str, prev: dict | None) -> bool:
+    """증분 모드에서 상세 페이지를 다시 열 글인가 — 처음 보거나, 날짜·요약이 비어 있던 글만."""
+    return not prev or not prev.get("게시일") or not prev.get("주요내용")
+
+
+def collect(board: str, max_pages: int | None, categories_override: list[int] | None = None,
+            incremental: bool = False) -> None:
     cfg = BOARDS[board]
     page_id, channel = cfg["page_id"], cfg["channel"]
     categories = categories_override if categories_override is not None else cfg["categories"]
     session = make_session()
 
+    records = load_existing()
+    known = frozenset(i for (ch, i) in records if ch == channel) if incremental else frozenset()
+
     listing: list[dict] = []
     seen_ids: set[str] = set()
     for cat in categories:
-        _crawl_category(session, page_id, channel, cat, max_pages, seen_ids, listing)
+        _crawl_category(session, page_id, channel, cat, max_pages, seen_ids, listing, known)
 
-    print(f"[{channel}] 목록에서 총 {len(listing)}개 항목 발견 (dedup 후)")
-
-    records = load_existing()
+    if incremental:
+        listing = [it for it in listing if needs_detail(it["id"], records.get((channel, it["id"])))]
+    print(f"[{channel}] 목록에서 {len(listing)}개 항목 처리 (dedup{' · 증분' if incremental else ''})")
 
     for item in tqdm(listing, desc=f"{channel} 상세"):
         try:
@@ -237,6 +249,8 @@ def main():
     p.add_argument("--categories", type=str, default=None,
                    help="카테고리 ID 콤마 구분(예: 50,49). 생략 시 BOARDS 기본값")
     p.add_argument("--inspect", action="store_true", help="첫 페이지 항목 3개 구조만 출력")
+    p.add_argument("--incremental", action="store_true",
+                   help="이미 가진 글만 나오는 페이지에서 멈추고, 새 글·빈 칸 글만 상세 수집(주간 갱신용)")
     args = p.parse_args()
     cats = None
     if args.categories:
@@ -244,7 +258,7 @@ def main():
     if args.inspect:
         inspect(args.board)
     else:
-        collect(args.board, max_pages=args.pages, categories_override=cats)
+        collect(args.board, max_pages=args.pages, categories_override=cats, incremental=args.incremental)
 
 
 if __name__ == "__main__":
