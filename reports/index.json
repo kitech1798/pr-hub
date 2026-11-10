@@ -1,0 +1,18 @@
+[
+  {
+    "month": "2026-10",
+    "file": "monthly_report_2026-10.html",
+    "in_progress": false,
+    "basis": "2026-11-10",
+    "good": 4,
+    "bad": 3
+  },
+  {
+    "month": "2026-11",
+    "file": "monthly_report_2026-11.html",
+    "in_progress": true,
+    "basis": "2026-11-10",
+    "good": 1,
+    "bad": 1
+  }
+]
