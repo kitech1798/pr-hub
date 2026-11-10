@@ -41,11 +41,12 @@ SURFACE = "rgba(17,26,46,0.62)"
 BORDER = "rgba(148,163,184,0.16)"
 TEXT = "#E6EDF7"
 MUTED = "#94A3B8"          # BG 대비 7.4:1
-ACCENT = "#22D3EE"
-ACCENT2 = "#38BDF8"
-VIOLET = "#A78BFA"
-CHANNEL_COLORS = {"보도자료": "#38BDF8", "포토뉴스": "#22D3EE", "유튜브": "#F472B6", "블로그": "#4ADE80"}
-POS, NEG = ACCENT, "#64748B"  # 평균 이상 / 이하
+# 색 하나 = 뜻 하나. 화면(UI) 색과 데이터 색을 섞지 않는다 — 시안 한 색이 강조·포토뉴스·평균 이상을 겸하던 문제를 끊는다.
+ACCENT = "#7AA2FF"         # UI 전용: 탭·링크 hover·포커스·소제목 (블루 계열 = 기관 톤)
+DATA = "#22D3EE"           # 데이터 전용: 단일 계열 막대·히트맵 상단·평균 이상
+GOOD, BAD, WARN = "#34D399", "#F87171", "#FCD34D"  # 상태 전용
+CHANNEL_COLORS = {"보도자료": "#FB923C", "포토뉴스": "#B794F6", "유튜브": "#F472B6", "블로그": "#8FCB5A"}
+POS, NEG = DATA, "#64748B"  # 평균 이상 / 이하
 DIM_AXES = {
     "보도유형": "보도유형", "연구분야": "연구분야", "국가전략기술": "전략기술",
     "제조혁신 로드맵": "제조혁신 로드맵", "지역혁신 로드맵": "지역혁신 로드맵", "R&R 연계": "R&R 연계", "가시성": "가시성",
@@ -72,15 +73,15 @@ NOISE = ("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width=
 st.markdown(f"""<style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
 :root {{ --bg:{BG}; --surface:{SURFACE}; --border:{BORDER}; --ink:{TEXT}; --muted:{MUTED};
-  --accent:{ACCENT}; --accent2:{ACCENT2}; --violet:{VIOLET}; --r:16px; --ease:cubic-bezier(.2,.7,.2,1); }}
+  --accent:{ACCENT}; --data:{DATA}; --good:{GOOD}; --warn:{WARN}; --r:16px; --ease:cubic-bezier(.2,.7,.2,1); }}
 .stApp, .stApp * {{ font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,'Malgun Gothic',sans-serif !important; }}
 .stApp {{ background:var(--bg); color:var(--ink); word-break:keep-all; }}
 /* 앰비언트 라이트 — 화면 뒤에서 천천히 움직이는 세 개의 빛 */
 .stApp::before {{ content:""; position:fixed; inset:-25vmax; z-index:0; pointer-events:none;
   background:
-    radial-gradient(38vmax 38vmax at 18% 12%, rgba(34,211,238,.17), transparent 62%),
-    radial-gradient(32vmax 32vmax at 86% 18%, rgba(167,139,250,.15), transparent 62%),
-    radial-gradient(44vmax 44vmax at 58% 105%, rgba(56,189,248,.11), transparent 62%);
+    radial-gradient(38vmax 38vmax at 18% 12%, rgba(122,162,255,.18), transparent 62%),
+    radial-gradient(32vmax 32vmax at 86% 18%, rgba(79,70,229,.16), transparent 62%),
+    radial-gradient(44vmax 44vmax at 58% 105%, rgba(56,132,248,.10), transparent 62%);
   filter:blur(24px); animation:drift 36s ease-in-out infinite alternate; }}
 /* 필름 그레인 — 평평한 다크 배경에 질감 */
 .stApp::after {{ content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.06;
@@ -92,31 +93,29 @@ st.markdown(f"""<style>
 .block-container {{ padding-top:2.2rem; max-width:1320px; }}
 .block-container > div {{ animation:rise .24s var(--ease) both; }}
 @keyframes rise {{ from{{opacity:0; transform:translateY(6px)}} to{{opacity:1; transform:none}} }}
-@media (prefers-reduced-motion: reduce) {{ .stApp::before, .block-container > div, .hero .glow, .live i {{ animation:none !important; }} }}
+@media (prefers-reduced-motion: reduce) {{ .stApp::before, .block-container > div, .hero .glow {{ animation:none !important; }} }}
 
-/* 유리 카드 */
+/* 데이터 카드 — 흐림(backdrop-filter)은 히어로·사이드바에만. 카드 뒤 배경은 거의 단색이라 흐림이 보이지 않고 렌더 비용만 든다.
+   클릭되지 않는 카드는 hover에 반응하지 않는다(떠오르면 눌러도 되는 것처럼 착각한다). */
 div[data-testid="stVerticalBlockBorderWrapper"] {{ background:var(--surface) !important; border:1px solid var(--border) !important;
-  border-radius:var(--r) !important; backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.04); transition:transform .18s var(--ease), border-color .18s, box-shadow .18s; }}
-div[data-testid="stVerticalBlockBorderWrapper"]:hover {{ border-color:rgba(34,211,238,.45) !important; transform:translateY(-2px);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 12px 32px -12px rgba(34,211,238,.28); }}
+  border-radius:var(--r) !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
 div[data-testid="stVerticalBlockBorderWrapper"] h4 {{ color:var(--ink); font-weight:650; letter-spacing:-.2px; margin:.1rem 0 .35rem; }}
 div[data-testid="stMetric"] {{ position:relative; overflow:hidden; background:var(--surface); padding:16px 18px; border-radius:var(--r);
-  border:1px solid var(--border); backdrop-filter:blur(14px); transition:border-color .18s, box-shadow .18s; }}
+  border:1px solid var(--border); }}
 div[data-testid="stMetric"]::before {{ content:""; position:absolute; left:0; right:0; top:0; height:1px;
-  background:linear-gradient(90deg, transparent, var(--accent), transparent); opacity:.55; }}
-div[data-testid="stMetric"]:hover {{ border-color:rgba(34,211,238,.4); box-shadow:0 0 0 1px rgba(34,211,238,.12), 0 10px 30px -14px rgba(34,211,238,.35); }}
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent); }}
 div[data-testid="stMetricLabel"] {{ color:var(--muted) !important; }}
 div[data-testid="stMetricValue"] {{ color:var(--ink) !important; font-weight:750; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }}
 div[data-baseweb="tab-list"] {{ gap:4px; border-bottom:1px solid var(--border); }}
 button[data-baseweb="tab"] {{ background:transparent !important; color:var(--muted) !important; border-radius:10px 10px 0 0 !important;
   padding:10px 16px !important; transition:color .15s; }}
 button[data-baseweb="tab"]:hover {{ color:var(--ink) !important; }}
-button[data-baseweb="tab"][aria-selected="true"] {{ color:var(--accent) !important; background:rgba(34,211,238,.08) !important; }}
-div[data-baseweb="tab-highlight"] {{ background:linear-gradient(90deg,var(--accent2),var(--accent)) !important; height:2px !important;
-  box-shadow:0 0 12px rgba(34,211,238,.8); }}
+button[data-baseweb="tab"][aria-selected="true"] {{ color:var(--accent) !important; background:rgba(122,162,255,.08) !important; }}
+div[data-baseweb="tab-highlight"] {{ background:var(--accent) !important; height:2px !important; box-shadow:0 0 12px rgba(122,162,255,.7); }}
 section[data-testid="stSidebar"] {{ background:rgba(10,15,28,.82); backdrop-filter:blur(16px); border-right:1px solid var(--border); }}
-a, a:visited {{ color:var(--accent2); text-decoration:none; }}  a:hover {{ color:var(--accent); text-decoration:underline; }}
+/* 링크는 글 색 그대로 — 목록 전체가 파란 밑줄로 덮이지 않게. 가리킬 때만 강조색+밑줄 */
+.stApp a, .stApp a:visited {{ color:var(--ink) !important; text-decoration:none !important; transition:color .15s; }}
+.stApp a:hover {{ color:var(--accent) !important; text-decoration:underline !important; text-underline-offset:3px; }}
 *:focus-visible {{ outline:2px solid var(--accent) !important; outline-offset:2px; }}
 ::-webkit-scrollbar {{ width:10px; height:10px; }} ::-webkit-scrollbar-thumb {{ background:rgba(148,163,184,.25); border-radius:99px; }}
 
@@ -124,11 +123,11 @@ a, a:visited {{ color:var(--accent2); text-decoration:none; }}  a:hover {{ color
 .hero {{ position:relative; overflow:hidden; border-radius:24px; padding:36px 40px 30px; margin-bottom:8px;
   border:1px solid var(--border); background:linear-gradient(135deg, rgba(17,26,46,.75), rgba(10,15,28,.55)); backdrop-filter:blur(18px); }}
 .hero .glow {{ position:absolute; width:420px; height:420px; right:-120px; top:-200px; border-radius:50%;
-  background:radial-gradient(circle, rgba(34,211,238,.35), transparent 65%); filter:blur(10px); animation:breathe 8s ease-in-out infinite; }}
+  background:radial-gradient(circle, rgba(122,162,255,.38), transparent 65%); filter:blur(10px); animation:breathe 8s ease-in-out infinite; }}
 @keyframes breathe {{ 0%,100%{{opacity:.75; transform:scale(1)}} 50%{{opacity:1; transform:scale(1.08)}} }}
 .hero .eyebrow {{ font-size:12px; letter-spacing:.18em; font-weight:700; color:var(--accent); text-transform:uppercase; }}
 .hero h1 {{ margin:6px 0 6px; font-size:clamp(28px,3.4vw,44px); line-height:1.15; letter-spacing:-.03em; font-weight:800;
-  background:linear-gradient(92deg,#F8FAFC 0%,#A5F3FC 45%,{VIOLET} 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }}
+  background:linear-gradient(92deg,#F8FAFC 0%,#C7D7FF 45%,{ACCENT} 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }}
 .hero p {{ margin:0; color:var(--muted); font-size:15.5px; max-width:720px; line-height:1.7; }}
 .hero .stats {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:24px; }}
 .hero .stat {{ padding:14px 16px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid var(--border); }}
@@ -136,22 +135,23 @@ a, a:visited {{ color:var(--accent2); text-decoration:none; }}  a:hover {{ color
 .hero .stat span {{ font-size:12.5px; color:var(--muted); }}
 .live {{ display:inline-flex; align-items:center; gap:8px; margin-top:14px; font-size:12.5px; color:var(--muted);
   padding:4px 10px; border-radius:99px; border:1px solid var(--border); background:rgba(255,255,255,.02); }}
-.live i {{ width:8px; height:8px; border-radius:50%; background:#4ADE80; box-shadow:0 0 0 0 rgba(74,222,128,.6); animation:pulse 2.4s infinite; }}
-@keyframes pulse {{ 0%{{box-shadow:0 0 0 0 rgba(74,222,128,.55)}} 70%{{box-shadow:0 0 0 10px rgba(74,222,128,0)}} 100%{{box-shadow:0 0 0 0 rgba(74,222,128,0)}} }}
+/* 주 1회 갱신 데이터 — 깜빡이는 '실시간' 점은 사실과 다른 신호라 정지 */
+.live i {{ width:8px; height:8px; border-radius:50%; background:var(--good); }}
 @media (max-width: 760px) {{ .hero {{ padding:26px 20px 22px; }} .hero .stats {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
 
 /* 섹션 머리 */
 .sec {{ margin:28px 0 12px; }} .sec .k {{ font-size:11.5px; letter-spacing:.18em; font-weight:700; color:var(--accent); }}
 .sec h3 {{ margin:2px 0 4px; font-size:21px; letter-spacing:-.02em; color:var(--ink); }}
 .sec p {{ margin:0; font-size:14px; color:var(--muted); }}
-.sec .line {{ height:1px; margin-top:12px; background:linear-gradient(90deg, rgba(34,211,238,.6), rgba(167,139,250,.25) 40%, transparent); }}
+.sec .line {{ height:1px; margin-top:12px; background:linear-gradient(90deg, rgba(122,162,255,.55), rgba(122,162,255,.12) 40%, transparent); }}
 .chip {{ display:inline-block; padding:2px 10px; border-radius:999px; font-size:.78rem; font-weight:650; margin:0 6px 4px 0;
   font-variant-numeric:tabular-nums; border:1px solid; }}
-.chip.soft {{ border-color:transparent; background:rgba(34,211,238,.10); color:var(--accent); }}
-.chip.violet {{ border-color:transparent; background:rgba(167,139,250,.12); color:#C4B5FD; }}
+.chip.soft {{ border-color:transparent; background:rgba(34,211,238,.10); color:var(--data); }}
+/* 조회·댓글 수치 — 이미 숫자가 뜻을 말하므로 색 없이 중립 */
+.chip.stat {{ border-color:transparent; background:rgba(148,163,184,.12); color:#CBD5E1; }}
 .chip.warn {{ border-color:transparent; background:rgba(251,191,36,.12); color:#FCD34D; }}
 .rank {{ display:flex; gap:12px; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--border); }}
-.rank:last-child {{ border-bottom:0; }} .rank .n {{ color:var(--accent); font-weight:800; width:18px; }}
+.rank:last-child {{ border-bottom:0; }} .rank .n {{ color:var(--muted); font-weight:800; width:18px; font-variant-numeric:tabular-nums; }}
 .rank .t {{ flex:1; color:var(--ink); font-size:14.5px; }} .rank .v {{ color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; white-space:nowrap; }}
 .verdict {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }}
 .verdict div {{ padding:12px 14px; border-radius:14px; border:1px solid var(--border); background:var(--surface); }}
@@ -211,7 +211,7 @@ def style_fig(fig, height: int = 320):
         template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=TEXT, family="Pretendard, sans-serif", size=13), height=height,
         margin=dict(t=10, b=10, l=10, r=10), legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.18, title_text=""),
-        hoverlabel=dict(bgcolor="#0F172A", bordercolor=ACCENT, font=dict(color=TEXT)),
+        hoverlabel=dict(bgcolor="#0F172A", bordercolor="rgba(148,163,184,0.35)", font=dict(color=TEXT)),
     )
     fig.update_xaxes(gridcolor="rgba(148,163,184,0.10)", zerolinecolor="rgba(148,163,184,0.16)")
     fig.update_yaxes(gridcolor="rgba(148,163,184,0.10)", zerolinecolor="rgba(148,163,184,0.16)")
@@ -294,7 +294,7 @@ raw(f"""<div class="hero"><div class="glow"></div>
  <div class="stat"><b>{articles:,}</b><span>보도 기사 (2020~)</span></div>
  <div class="stat"><b>{fmt_n(home_views + yt_views)}</b><span>누적 조회 (홈페이지+유튜브)</span></div>
 </div>
-<div class="live"><i></i>매주 월요일 자동 갱신 · 보도성과 기준일 {esc(perf_meta.get('기준일', '-'))}</div>
+<div class="live"><i></i>주간 갱신 · 기준일 {esc(perf_meta.get('기준일', '-'))}</div>
 </div>""")
 
 
@@ -303,9 +303,9 @@ def chips(row: pd.Series) -> str:
     out = []
     v, c = row.get("조회수_n"), row.get("댓글수_n")
     if pd.notna(v):
-        out.append(f"<span class='chip violet'>조회 {fmt_n(v)}</span>")
+        out.append(f"<span class='chip stat'>조회 {fmt_n(v)}</span>")
     if row["채널"] == "블로그" and pd.notna(c) and c > 0:
-        out.append(f"<span class='chip violet'>댓글 {int(c)}</span>")
+        out.append(f"<span class='chip stat'>댓글 {int(c)}</span>")
     if row["채널"] == "보도자료" and (p := PERF_BY_ID.get(str(row["id"]))):
         out.append(f"<span class='chip soft'>보도 매체 {int(p['매체 수'])}곳 · 기사 {int(p['기사 수'])}건</span>")
         if str(p["집계 상태"]).startswith("집계 중"):
@@ -323,7 +323,7 @@ def render_card(row: pd.Series, show_channel: bool) -> None:
             with cols[0]:
                 st.image(thumb, width="stretch")
         with cols[1]:
-            color = CHANNEL_COLORS.get(row["채널"], ACCENT)
+            color = CHANNEL_COLORS.get(row["채널"], MUTED)
             head = (f"<span class='chip' style='color:{color};border-color:{color}'>{esc(row['채널'])}</span>" if show_channel else "")
             raw(f"<div style='color:{MUTED};font-size:.85rem;margin-bottom:2px'>{head}{date_str}</div>")
             st.markdown(f"#### {row['제목']}")
@@ -399,7 +399,7 @@ with tab_dash:
             if not heat.empty:
                 pivot = heat.astype({"연": int, "월": int}).pivot(index="연", columns="월", values="건수").fillna(0).sort_index(ascending=False)
                 fig = px.imshow(pivot, aspect="auto", labels=dict(x="월", y="", color="건수"),
-                                color_continuous_scale=[[0, "#0B1220"], [0.4, "#0E7490"], [0.7, ACCENT], [1, "#A5F3FC"]])
+                                color_continuous_scale=[[0, "#0B1220"], [0.4, "#0E7490"], [0.7, DATA], [1, "#A5F3FC"]])
                 st.plotly_chart(style_fig(fig).update_xaxes(dtick=1))
         with c4:
             st.markdown("##### 최근 12개월 추이")
@@ -416,7 +416,7 @@ with tab_dash:
         if top := Counter(tokens).most_common(20):
             kw = pd.DataFrame(top, columns=["키워드", "빈도"]).iloc[::-1]
             fig = px.bar(kw, x="빈도", y="키워드", orientation="h", color="빈도",
-                         color_continuous_scale=[[0, "#0E7490"], [0.5, ACCENT], [1, "#67E8F9"]])
+                         color_continuous_scale=[[0, "#0E7490"], [0.5, DATA], [1, "#67E8F9"]])
             st.plotly_chart(style_fig(fig, 480).update_layout(coloraxis_showscale=False, bargap=0.25, yaxis_title=None))
 
 
@@ -456,7 +456,7 @@ with tab_perf:
                 yr = settled.dropna(subset=["배포일"]).assign(연=lambda d: d["배포일"].dt.year.astype(str))
                 if not yr.empty:
                     by_year = yr.groupby("연")["매체 수"].median().reset_index()
-                    fig = px.bar(by_year, x="연", y="매체 수", text="매체 수", color_discrete_sequence=[ACCENT2])
+                    fig = px.bar(by_year, x="연", y="매체 수", text="매체 수", color_discrete_sequence=[DATA])
                     fig.update_traces(texttemplate="%{text:.0f}곳", textposition="outside", cliponaxis=False,
                                       marker=dict(line=dict(width=0)))
                     st.plotly_chart(style_fig(fig, 300).update_layout(xaxis_title=None, yaxis_title=None, bargap=0.4))
@@ -466,7 +466,7 @@ with tab_perf:
                 if top := Counter(names).most_common(15):
                     tdf = pd.DataFrame(top, columns=["매체", "보도한 보도자료 수"]).iloc[::-1]
                     fig = px.bar(tdf, x="보도한 보도자료 수", y="매체", orientation="h", text="보도한 보도자료 수",
-                                 color_discrete_sequence=[ACCENT])
+                                 color_discrete_sequence=[DATA])
                     fig.update_traces(textposition="outside", cliponaxis=False)
                     st.plotly_chart(style_fig(fig, 300 + 8 * len(top)).update_layout(xaxis_title=None, yaxis_title=None))
 
@@ -498,7 +498,7 @@ with tab_perf:
                         text=[f"{m:.1f}곳 · {n}건" for m, n in zip(stats["mean"], stats["n"], strict=True)],
                         textposition="outside", cliponaxis=False,
                         hovertemplate="%{y}<br>평균 %{x:.1f}곳<extra></extra>"))
-                    fig.add_vline(x=overall, line=dict(color=VIOLET, dash="dot", width=1.5))
+                    fig.add_vline(x=overall, line=dict(color=MUTED, dash="dot", width=1.5))
                     # 라벨은 그림 영역 밖 위쪽에 둔다 — 안쪽에 두면 1위 막대와 겹친다(캡처로 두 번 확인)
                     fig.add_annotation(x=overall, y=1, xref="x", yref="paper", yanchor="bottom", showarrow=False,
                                        text=f"전체 평균 {overall:.1f}곳", font=dict(color="#C4B5FD", size=12))
@@ -514,7 +514,7 @@ with tab_perf:
                     기사=("기사 수", "sum"), 보도자료=("id", "count"), 평균매체=("매체 수", "mean")).reset_index()
                 if not tm.empty:
                     fig = px.treemap(tm, path=["연구분야"], values="기사", color="평균매체",
-                                     color_continuous_scale=[[0, "#1E293B"], [0.5, "#0E7490"], [1, ACCENT]],
+                                     color_continuous_scale=[[0, "#1E293B"], [0.5, "#0E7490"], [1, DATA]],
                                      custom_data=["보도자료", "평균매체"])
                     fig.update_traces(texttemplate="<b>%{label}</b><br>기사 %{value}건", marker=dict(cornerradius=8),
                                       hovertemplate="%{label}<br>기사 %{value}건 · 보도자료 %{customdata[0]}건"
@@ -562,8 +562,8 @@ with tab_report:
         else:
             body = path.read_text(encoding="utf-8-sig")
             raw(f"""<div class='verdict'>
-<div><b style='color:#34D399'>{rep['good']}</b><span>Good</span></div>
-<div><b style='color:#F87171'>{rep['bad']}</b><span>Bad</span></div>
+<div><b style='color:{GOOD}'>{rep['good']}</b><span>Good</span></div>
+<div><b style='color:{BAD}'>{rep['bad']}</b><span>Bad</span></div>
 <div><b>{esc(rep['basis'])}</b><span>데이터 기준일</span></div>
 <div><b>{'진행 중' if rep['in_progress'] else '마감'}</b><span>상태</span></div></div>""")
             st.download_button("⬇ HTML 보고서 내려받기", data=path.read_bytes(), file_name=rep["file"], mime="text/html",
