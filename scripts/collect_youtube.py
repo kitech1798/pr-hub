@@ -12,11 +12,11 @@ yt-dlp가 영상별 -j 출력을 ndjson(한 줄에 한 영상 JSON) 형태로 �
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Windows PowerShell cp949 회피
@@ -29,18 +29,13 @@ except Exception:
 CHANNEL = "유튜브"
 CHANNEL_URL = "https://www.youtube.com/@KITECHYOUTUBE/videos"
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = PROJECT_ROOT / "data"
-RAW_DIR = PROJECT_ROOT / "raw" / "유튜브-메타"
-DATASET_CSV = DATA_DIR / "허브-데이터셋.csv"
-VIDEOS_JSONL = RAW_DIR / "videos.jsonl"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-RAW_DIR.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common import DATASET_CSV, PROJECT_ROOT, save_dataset  # noqa: E402
+from common import load_dataset as load_existing  # noqa: E402
 
-CSV_FIELDS = [
-    "채널", "게시일", "제목", "주요내용",
-    "링크", "id", "썸네일URL", "분야태그", "비고",
-]
+RAW_DIR = PROJECT_ROOT / "raw" / "유튜브-메타"
+VIDEOS_JSONL = RAW_DIR / "videos.jsonl"
+RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def inspect() -> None:
@@ -100,29 +95,6 @@ def parse_upload_date(s: str | None) -> str:
     return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
 
 
-def load_existing() -> dict[tuple[str, str], dict]:
-    if not DATASET_CSV.exists():
-        return {}
-    out = {}
-    with DATASET_CSV.open("r", encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
-            out[(row.get("채널", ""), row.get("id", ""))] = row
-    return out
-
-
-def save_dataset(records: dict[tuple[str, str], dict]) -> None:
-    rows = list(records.values())
-    rows.sort(
-        key=lambda r: (r.get("게시일") or "", r.get("채널") or "", r.get("id") or ""),
-        reverse=True,
-    )
-    with DATASET_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in CSV_FIELDS})
-
-
 def merge() -> None:
     if not VIDEOS_JSONL.exists():
         print(f"[유튜브] {VIDEOS_JSONL} 없음 — --fetch 먼저 실행", file=sys.stderr)
@@ -148,7 +120,6 @@ def merge() -> None:
             title = d.get("title") or ""
             url = d.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}"
             view_count = d.get("view_count")
-            views_note = f"조회수={view_count}" if view_count is not None else ""
 
             key = (CHANNEL, vid)
             prev = records.get(key, {})
@@ -159,6 +130,9 @@ def merge() -> None:
                 if thumbs:
                     thumb = thumbs[0].get("url", "")
             new_row = {
+                **prev,
+                # 예전엔 비고에 '조회수=…' 문자열로 넣었다 — 집계할 수 있게 숫자 열로 옮긴다
+                **({"조회수": str(view_count), "지표기준일": time.strftime("%Y-%m-%d")} if view_count is not None else {}),
                 "채널": CHANNEL,
                 "게시일": parse_upload_date(d.get("upload_date")),
                 "제목": title,
@@ -167,7 +141,7 @@ def merge() -> None:
                 "id": vid,
                 "썸네일URL": thumb,
                 "분야태그": prev.get("분야태그", ""),
-                "비고": views_note,
+                "비고": "" if str(prev.get("비고", "")).startswith("조회수=") else prev.get("비고", ""),
             }
             if key in records:
                 if records[key] != new_row:

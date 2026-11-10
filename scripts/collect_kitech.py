@@ -9,21 +9,24 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import sys
-from pathlib import Path
+import time
 
 from tqdm import tqdm
 
 from common import (
     BASE_URL,
+    DATASET_CSV,
     absolute_url,
     fetch,
     find_date_near,
     make_session,
     parse_total_count,
+    parse_view_count,
+    save_dataset,
 )
+from common import load_dataset as load_existing
 
 BOARDS = {
     "press": {
@@ -38,16 +41,6 @@ BOARDS = {
         "categories": [None],  # 포토뉴스는 단일 목록
     },
 }
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = PROJECT_ROOT / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DATASET_CSV = DATA_DIR / "허브-데이터셋.csv"
-
-CSV_FIELDS = [
-    "채널", "게시일", "제목", "주요내용",
-    "링크", "id", "썸네일URL", "분야태그", "비고",
-]
 
 ITEM_LINK_RE = re.compile(r"[?&]id=(\d+).*menuMode=READ")
 ITEMS_PER_PAGE_GUESS = 9
@@ -118,31 +111,7 @@ def parse_detail(soup) -> dict:
     body = body_el.get_text(" ", strip=True) if body_el else ""
 
     summary = re.sub(r"\s+", " ", body)[:200].strip() if body else ""
-    return {"date": date, "summary": summary}
-
-
-def load_existing() -> dict[tuple[str, str], dict]:
-    if not DATASET_CSV.exists():
-        return {}
-    out = {}
-    with DATASET_CSV.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            out[(row.get("채널", ""), row.get("id", ""))] = row
-    return out
-
-
-def save_dataset(records: dict[tuple[str, str], dict]) -> None:
-    rows = list(records.values())
-    rows.sort(
-        key=lambda r: (r.get("게시일") or "", r.get("채널") or "", r.get("id") or ""),
-        reverse=True,
-    )
-    with DATASET_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in CSV_FIELDS})
+    return {"date": date, "summary": summary, "views": parse_view_count(soup.get_text(" ", strip=True))}
 
 
 def inspect(board: str) -> None:
@@ -219,6 +188,7 @@ def collect(board: str, max_pages: int | None, categories_override: list[int] | 
             if not item["date"] and detail["date"]:
                 item["date"] = detail["date"]
             item["summary"] = detail["summary"]
+            item["views"] = detail["views"]
         except Exception as e:
             item["summary"] = ""
             print(f"  [경고] {item['url']} — {e}", file=sys.stderr)
@@ -226,7 +196,10 @@ def collect(board: str, max_pages: int | None, categories_override: list[int] | 
     for item in listing:
         key = (channel, item["id"])
         prev = records.get(key, {})
+        views = item.get("views")
         records[key] = {
+            **prev,  # 조회수·댓글수 등 이 수집기가 다루지 않는 열을 지우지 않는다
+            **({"조회수": str(views), "지표기준일": time.strftime("%Y-%m-%d")} if views is not None else {}),
             "채널": channel,
             "게시일": item.get("date", ""),
             "제목": item.get("title", ""),

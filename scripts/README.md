@@ -70,6 +70,18 @@ Get-Content logs\last_status.txt                                            # �
 Start-ScheduledTask -TaskName KITECH_홍보_주간갱신                            # 지금 한 번 돌리기
 ```
 
+## 5. 반응 지표 · 월간 보고서
+
+| 채널 | 공개 지표 | 수집 |
+|---|---|---|
+| 보도자료·포토뉴스 | 홈페이지 게시판 '조회수'(누적) | `collect_metrics.py` (매주 최근 400일, `--all` 전체 약 15분) |
+| 유튜브 | view_count | `collect_youtube.py --merge` |
+| 블로그 | 조회수 비공개 → 댓글 수만 | `collect_metrics.py` |
+
+- 이력은 `data/지표_이력.csv`에 쌓인다(2026-11-10부터). 한 달 이상 쌓이면 '그달 늘어난 조회수'를 계산할 수 있다.
+- 월간 보고서: `python scripts\monthly_report.py` → `reports\monthly_report_YYYY-MM.html`(2026-10부터). Good·Bad·시사점·개선점은 숫자 규칙으로 뽑는다(판정 기준은 보고서 맨 아래).
+- 데이터셋 열 정의는 `common.py`의 `CSV_FIELDS` 한 곳에만 있다. 수집기마다 따로 두면 저장할 때 다른 수집기의 열을 지운다.
+
 ## 산출 컬럼
 
 | 컬럼 | 설명 | v1 화면 노출 |

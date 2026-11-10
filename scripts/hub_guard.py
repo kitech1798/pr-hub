@@ -24,11 +24,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 DATASET = DATA / "허브-데이터셋.csv"
 PERF_SRC = ROOT.parent / "보도자료 성과분석" / "output" / "hub"
-PERF_FILES = ("보도성과.csv", "보도성과_매체.csv", "보도성과_meta.json")
+PERF_FILES = ("보도성과.csv", "보도성과_매체.csv", "보도성과_meta.json", "보도성과_분야.csv")
 
+# 보도자료 성과분석 src/prc/weekly.py 의 HUB_*_COLS 와 같은 계약 — 저쪽이 바뀌면 여기서 막힌다
+DIM_COLS = ["보도유형", "연구분야", "전략기술", "제조혁신 로드맵", "지역혁신 로드맵", "R&R 연계", "가시성"]
 RELEASE_COLS = ["id", "배포일", "제목", "기사 수", "매체 수", "등급별 매체 수", "매체명",
-                "첫 기사일", "검토대기 기사", "집계 상태", "링크"]
+                "첫 기사일", "검토대기 기사", "집계 상태", "링크", *DIM_COLS]
 MEDIA_COLS = ["매체", "등급", "보도한 보도자료 수", "기사 수"]
+FIELD_COLS = ["축", "항목", "보도자료 수", "매체 수 중앙값", "매체 수 평균", "전체 평균 대비", "기사 수 합계"]
 # 공개 저장소로 나가면 안 되는 열 — 성과분석 쪽 내보내기가 바뀌어도 여기서 한 번 더 막는다
 FORBIDDEN_COLS = {"기자", "매체(기자)", "관련 연구자", "연구자", "reporter", "researchers"}
 MAX_SHRINK = 0.05  # 채널 건수가 5% 넘게 줄면 막는다
@@ -40,16 +43,20 @@ def read_csv_text(text: str) -> tuple[list[str], list[dict[str, str]]]:
     return list(reader.fieldnames or []), rows
 
 
-def validate_perf(rel_text: str, media_text: str, meta: dict, prev_rel_rows: int) -> list[str]:
+def validate_perf(rel_text: str, media_text: str, meta: dict, prev_rel_rows: int,
+                  field_text: str | None = None) -> list[str]:
     """문제 목록(비어 있으면 통과)."""
     problems: list[str] = []
     rcols, rrows = read_csv_text(rel_text)
     mcols, _ = read_csv_text(media_text)
+    fcols = read_csv_text(field_text)[0] if field_text is not None else FIELD_COLS
     if rcols != RELEASE_COLS:
         problems.append(f"보도성과.csv 열이 다릅니다: {rcols}")
     if mcols != MEDIA_COLS:
         problems.append(f"보도성과_매체.csv 열이 다릅니다: {mcols}")
-    leaked = FORBIDDEN_COLS & (set(rcols) | set(mcols))
+    if fcols != FIELD_COLS:
+        problems.append(f"보도성과_분야.csv 열이 다릅니다: {fcols}")
+    leaked = FORBIDDEN_COLS & (set(rcols) | set(mcols) | set(fcols))
     if leaked:
         problems.append(f"공개 금지 열 포함: {sorted(leaked)}")
     if not meta.get("기준일"):
@@ -92,7 +99,8 @@ def cmd_import_perf() -> int:
     meta = json.loads((PERF_SRC / PERF_FILES[2]).read_text(encoding="utf-8"))
     prev = DATA / PERF_FILES[0]
     prev_rows = len(read_csv_text(prev.read_text(encoding="utf-8-sig"))[1]) if prev.exists() else 0
-    problems = validate_perf(rel_text, media_text, meta, prev_rows)
+    field_text = (PERF_SRC / PERF_FILES[3]).read_text(encoding="utf-8-sig")
+    problems = validate_perf(rel_text, media_text, meta, prev_rows, field_text)
     if problems:
         print("✗ 보도성과 가져오기 막음:\n  " + "\n  ".join(problems))
         return 1

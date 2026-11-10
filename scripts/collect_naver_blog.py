@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import sys
 import time
@@ -40,15 +39,9 @@ LIST_URL = (
 VIEW_URL = "https://m.blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}"
 PUBLIC_URL = "https://blog.naver.com/{blog_id}/{log_no}"
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = PROJECT_ROOT / "data"
-DATASET_CSV = DATA_DIR / "허브-데이터셋.csv"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-CSV_FIELDS = [
-    "채널", "게시일", "제목", "주요내용",
-    "링크", "id", "썸네일URL", "분야태그", "비고",
-]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common import DATASET_CSV, save_dataset  # noqa: E402
+from common import load_dataset as load_existing  # noqa: E402
 
 HEADERS = {
     "User-Agent": (
@@ -108,6 +101,8 @@ def parse_listing(text: str) -> list[dict]:
             "addDate": fields.get("addDate", ""),
             "categoryNo": fields.get("categoryNo", ""),
             "parentCategoryNo": fields.get("parentCategoryNo", ""),
+            # readCount(조회수)는 블로그 설정상 비공개라 항상 빈 값 — 공개된 반응 지표는 댓글 수뿐(2026-11-10 확인)
+            "commentCount": fields.get("commentCount", ""),
         })
     return items
 
@@ -142,30 +137,6 @@ def parse_post_view(html: str) -> dict:
         thumb = img["src"]
 
     return {"date": date, "summary": summary, "thumbnail": thumb}
-
-
-def load_existing() -> dict[tuple[str, str], dict]:
-    if not DATASET_CSV.exists():
-        return {}
-    out = {}
-    with DATASET_CSV.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            out[(row.get("채널", ""), row.get("id", ""))] = row
-    return out
-
-
-def save_dataset(records: dict[tuple[str, str], dict]) -> None:
-    rows = list(records.values())
-    rows.sort(
-        key=lambda r: (r.get("게시일") or "", r.get("채널") or "", r.get("id") or ""),
-        reverse=True,
-    )
-    with DATASET_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in CSV_FIELDS})
 
 
 def crawl_listing(session, max_pages: int | None, known_ids: frozenset = frozenset()) -> list[dict]:
@@ -251,6 +222,8 @@ def collect(max_pages: int | None, incremental: bool = False) -> None:
         key = (CHANNEL, item["id"])
         prev = records.get(key, {})
         records[key] = {
+            **prev,  # 다른 수집기가 채운 열(조회수 등)을 지우지 않는다
+            "댓글수": item.get("commentCount", "") or prev.get("댓글수", ""),
             "채널": CHANNEL,
             "게시일": date,
             "제목": item["title"],

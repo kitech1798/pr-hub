@@ -1,9 +1,15 @@
-"""KITECH 홍보 허브 — 공통 유틸 (HTTP 세션·HTML 파싱·날짜 추출)"""
+"""KITECH 홍보 허브 — 공통 유틸 (데이터셋 스키마·HTTP 세션·HTML 파싱·날짜 추출)
+
+데이터셋 열 정의는 여기 한 곳에만 둔다. 예전엔 수집기 3개가 각자 CSV_FIELDS를 갖고 있어서,
+한 수집기에만 열을 추가하면 다른 수집기가 저장할 때 그 열을 지워 버리는 구조였다.
+"""
 from __future__ import annotations
 
+import csv
 import re
 import sys
 import time
+from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
@@ -17,6 +23,49 @@ except Exception:
     pass
 
 BASE_URL = "https://www.kitech.re.kr"
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+DATASET_CSV = DATA_DIR / "허브-데이터셋.csv"
+METRIC_HISTORY_CSV = DATA_DIR / "지표_이력.csv"
+
+CSV_FIELDS = [
+    "채널", "게시일", "제목", "주요내용",
+    "링크", "id", "썸네일URL", "분야태그", "비고",
+    # 반응 지표 — collect_metrics.py가 채운다. 블로그는 조회수가 비공개라 댓글수만.
+    "조회수", "댓글수", "지표기준일",
+]
+HISTORY_FIELDS = ["기준일", "채널", "id", "조회수", "댓글수"]
+
+
+def load_dataset(path: Path = DATASET_CSV) -> dict[tuple[str, str], dict]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        return {(r.get("채널", ""), r.get("id", "")): r for r in csv.DictReader(f)}
+
+
+def save_dataset(records: dict[tuple[str, str], dict], path: Path = DATASET_CSV) -> None:
+    rows = sorted(
+        records.values(),
+        key=lambda r: (r.get("게시일") or "", r.get("채널") or "", r.get("id") or ""),
+        reverse=True,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        w.writeheader()
+        for row in rows:
+            w.writerow({k: row.get(k, "") for k in CSV_FIELDS})
+
+
+_VIEW_RE = re.compile(r"조회수\s*([\d,]+)")
+
+
+def parse_view_count(text: str) -> int | None:
+    """홈페이지 게시판 상세의 '조회수 6,791' → 6791. 없으면 None."""
+    m = _VIEW_RE.search(text)
+    return int(m.group(1).replace(",", "")) if m else None
 
 HEADERS = {
     "User-Agent": (

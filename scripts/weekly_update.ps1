@@ -1,8 +1,8 @@
 ﻿# KITECH 홍보 허브 — 주간 자동 갱신 (작업 스케줄러: 매주 월요일 08:30)
 #
 #  1. 보도자료 성과분석  : 새 보도자료 수집 + 집계 중(배포 67일 이내) 재검색 → 엑셀·주간 메모·허브용 CSV
-#  2. 허브 4채널 증분 수집: 보도자료·포토뉴스·블로그(새 글만) + 유튜브(목록 전체, 30초)
-#  3. 안전장치          : 보도성과 검사·복사 → 테스트 → 채널 건수 급감 검사
+#  2. 허브 4채널 증분 수집: 보도자료·포토뉴스·블로그(새 글만) + 유튜브(목록 전체, 30초) + 반응 지표(조회수·댓글)
+#  3. 안전장치          : 보도성과 검사·복사 → 월간 보고서(2026-10~) → 테스트 → 채널 건수 급감 검사
 #  4. 커밋·푸시          : 3이 모두 통과할 때만. 푸시하면 Streamlit Cloud가 1~2분 뒤 자동 반영
 #
 # 수동 실행:  powershell -ExecutionPolicy Bypass -File scripts\weekly_update.ps1 [-NoPush]
@@ -57,6 +57,7 @@ $collect = [ordered]@{
     '블로그'   = 'scripts\collect_naver_blog.py --incremental'
     '유튜브 목록' = 'scripts\collect_youtube.py --fetch'
     '유튜브 병합' = 'scripts\collect_youtube.py --merge'
+    '반응 지표' = 'scripts\collect_metrics.py'   # 최근 400일 홈페이지 조회수 + 블로그 댓글 + 이력(유튜브 조회수는 병합 단계에서)
 }
 foreach ($k in $collect.Keys) {
     $c = Step "수집: $k" $hub "`"$py`" $($collect[$k])"
@@ -65,6 +66,7 @@ foreach ($k in $collect.Keys) {
 
 # 3. 안전장치
 if ((Step '보도성과 가져오기' $hub "`"$py`" scripts\hub_guard.py import-perf") -ne 0) { $warn += '보도성과 가져오기 막힘 — 지난주 값 유지' }
+if ((Step '월간 보고서' $hub "`"$py`" scripts\monthly_report.py") -ne 0) { $warn += '월간 보고서 생성 실패 — 지난주 판 유지' }
 if ((Step '테스트' $hub "`"$py`" -m pytest -q tests") -ne 0) { $block += '테스트 실패' }
 if ((Step '데이터 급감 검사' $hub "`"$py`" scripts\hub_guard.py check") -ne 0) { $block += '데이터 급감' }
 
@@ -73,7 +75,8 @@ $result = ''
 if ($block.Count -gt 0) {
     $result = "막음: $($block -join ', ') — 커밋·푸시 안 함"
 } else {
-    git -C $hub add -- 'data/허브-데이터셋.csv' 'data/보도성과.csv' 'data/보도성과_매체.csv' 'data/보도성과_meta.json' 2>$null
+    git -C $hub add -- 'data/허브-데이터셋.csv' 'data/보도성과.csv' 'data/보도성과_매체.csv' 'data/보도성과_meta.json' `
+        'data/보도성과_분야.csv' 'data/지표_이력.csv' 'reports' 2>$null
     git -C $hub diff --cached --quiet
     if ($LASTEXITCODE -eq 0) {
         $result = '변경 없음'
