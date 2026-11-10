@@ -82,16 +82,16 @@ Start-ScheduledTask -TaskName KITECH_홍보_주간갱신                        
 - 월간 보고서: `python scripts\monthly_report.py` → `reports\monthly_report_YYYY-MM.html`(2026-10부터). Good·Bad·시사점·개선점은 숫자 규칙으로 뽑는다(판정 기준은 보고서 맨 아래).
 - 데이터셋 열 정의는 `common.py`의 `CSV_FIELDS` 한 곳에만 있다. 수집기마다 따로 두면 저장할 때 다른 수집기의 열을 지운다.
 
-## 6. 잠들기 방지 (3시간마다)
+## 6. 잠들기 방지 — Checkly 브라우저 점검 (6시간마다)
 
-Streamlit Community Cloud는 12시간 동안 보는 사람이 없으면 앱을 재운다. 작업 스케줄러 `KITECH_홍보허브_깨우기`가
-3시간마다 `keep_awake.py`로 실제 브라우저 방문을 하고, 잠들어 있으면 깨우기 버튼을 누른다. 결과는 `logs\keep_awake.log`
-(`awake` / `woken` / `fail:…`).
+Streamlit Community Cloud는 12시간 동안 보는 사람이 없으면 앱을 재운다. **Checkly**(무료 Hobby, 브라우저 점검 월 1,000회)가
+6시간마다 실제 브라우저로 방문하고, 잠들어 있으면 깨우기 버튼을 누른다. 점검 코드는 `checkly_keep_awake.spec.js`.
+설정: 주기 6h · 위치 1곳(한 달 약 120회). 앱이 2분 안에 안 뜨면 Checkly가 메일로 알린다.
 
-- HTTP 호출(curl)로는 안 된다 — 인증 리다이렉트에서 멈춰 앱 세션이 생기지 않는다.
-- 예전 GitHub Actions 깨우기 로봇(naonjip·export-safety-belt)은 2026-08부터 **계정 결제 문제로 작업이 시작되지 않았다.**
-  결제가 풀리면 Actions로 옮겨 PC가 꺼져 있어도 돌게 할 수 있다.
-- PC가 12시간 넘게 꺼져 있으면(주말 등) 그 사이엔 잠든다. 켜지면 첫 실행이 깨운다.
+- HTTP 핑(UptimeRobot·cron-job.org)으로는 안 된다 — 303으로 share.streamlit.io 인증 페이지에 막혀 앱에 닿지 못한다(2026-11-10 실측).
+- 12시간 간격은 쓰지 않는다 — 잠드는 기준과 같아 경계에 걸린다.
+- GitHub Actions 깨우기 로봇(naonjip·export-safety-belt)은 2026-08부터 계정 결제 문제로 작업이 시작되지 않았다.
+- `keep_awake.py`는 같은 일을 PC에서 한 번 수동 실행할 때 쓴다(PC 스케줄러 등록은 2026-11-10 삭제).
 
 ## 산출 컬럼
 
