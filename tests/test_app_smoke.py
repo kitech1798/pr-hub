@@ -15,12 +15,12 @@ def run() -> AppTest:
 def test_app_renders_without_exception() -> None:
     at = run()
     assert not at.exception, [e.value for e in at.exception]
-    assert [t.label for t in at.tabs][:4] == ["📊 대시보드", "📈 보도성과", "🗓 월간 보고서", "🔍 통합검색"]
+    assert [t.label for t in at.tabs] == ["개요", "보도성과", "월간 보고", "아카이브"]
 
 
 def test_perf_tab_respects_search_filter() -> None:
     at = run()
-    at.sidebar.text_input[0].set_value("존재하지않는검색어zz").run()
+    at.text_input(key="q").set_value("존재하지않는검색어zz").run()
     assert not at.exception, [e.value for e in at.exception]
 
 
@@ -42,3 +42,17 @@ def test_every_monthly_report_renders() -> None:
     for opt in boxes[0].options:
         boxes[0].set_value(opt).run()
         assert not at.exception, (opt, [e.value for e in at.exception])
+
+
+def test_element_tree_before_tabs_is_stable_across_reruns() -> None:
+    """회귀(실측): 인트로를 '첫 실행에만' 요소로 내면 다음 실행에서 st.tabs 가 새 위젯이 되어
+    어느 탭에서든 위젯을 한 번 누르면 첫 탭('개요')으로 튕겼다. 탭 앞 요소의 종류·개수가 실행마다 같아야 한다."""
+    def shape(at: AppTest) -> list[str]:
+        return [c.type for c in at.main.children.values()]
+
+    at = run()
+    first = shape(at)
+    at.text_input(key="q").set_value("전고체").run()
+    second = shape(at)
+    assert not at.exception, [e.value for e in at.exception]
+    assert first == second, (first, second)
