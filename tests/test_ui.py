@@ -79,3 +79,20 @@ def test_css_tokens_are_injected_and_icons_excluded_from_font_override() -> None
 
 def test_channel_colors_cover_all_channels() -> None:
     assert set(ui.CHANNEL_COLORS) == {"보도자료", "포토뉴스", "유튜브", "블로그"}
+
+
+def test_intro_embeds_emblem_and_survives_missing_file(monkeypatch) -> None:
+    """엠블럼은 data URI 로 심기고, 파일이 없어도 인트로(선·이름)는 깨지지 않는다."""
+    m = ui.intro_html()
+    assert "--logo:url(" in m and "data:image/webp;base64," in m and "\n" not in m
+    assert ui.ORG_NAME in m and "class='emb'" in m
+    monkeypatch.setattr(ui, "_emblem_data_uri", lambda: "")
+    bare = ui.intro_html()
+    assert "--logo" not in bare and ui.ORG_NAME in bare
+
+
+def test_keyframe_names_are_unique() -> None:
+    """같은 이름의 @keyframes 가 둘이면 뒤의 것이 앞의 것을 조용히 덮어쓴다(인트로 일출이 사라졌던 실제 사고)."""
+    names = re.findall(r"@keyframes\s+([\w-]+)", ui.css())
+    dup = sorted({n for n in names if names.count(n) > 1})
+    assert not dup, f"중복 키프레임: {dup}"

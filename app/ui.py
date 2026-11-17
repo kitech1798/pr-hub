@@ -8,7 +8,9 @@
 """
 from __future__ import annotations
 
+import base64
 import html
+from pathlib import Path
 from collections.abc import Iterable, Sequence
 
 # ── 토큰 ─────────────────────────────────────────────────────────
@@ -72,18 +74,32 @@ details{border-color:var(--line) !important;border-radius:var(--r) !important;}
 ::-webkit-scrollbar{width:10px;height:10px;}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.25);border-radius:99px;}
 
 /* ── 인트로(세션당 1회) — 로딩 중 레이아웃 흔들림을 가리는 마스크를 겸한다 ── */
-.kt-intro{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:var(--bg);
-  animation:kt-out .75s cubic-bezier(.7,0,.2,1) 2.1s forwards;cursor:pointer;}
+.kt-intro{--em:clamp(130px,27vmin,230px);position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:var(--bg);
+  animation:kt-out .75s cubic-bezier(.7,0,.2,1) 3.5s forwards;cursor:pointer;}
 .kt-intro.kt-skip{animation:kt-out .35s cubic-bezier(.7,0,.2,1) 0s forwards;}
-.kt-intro::before{content:"";position:absolute;inset:0;background:radial-gradient(50vmax 36vmax at 70% 30%,rgba(122,162,255,.18),transparent 70%);}
-.kt-intro .box{position:relative;text-align:center;padding:0 20px;}
-.kt-intro .rule{height:1px;width:0;margin:0 auto 30px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:kt-rule .8s var(--ease) .3s forwards;}
-.kt-intro .mark{font-size:clamp(34px,6vw,64px);font-weight:800;color:var(--ink);opacity:0;padding-left:.4em;animation:kt-mark 1s var(--ease) .6s forwards;}
-.kt-intro .name{margin-top:18px;font-size:clamp(16px,2vw,22px);color:var(--ink2);opacity:0;transform:translateY(10px);animation:kt-name .7s var(--ease) 1.15s forwards;}
-.kt-intro .skip{position:absolute;right:28px;bottom:24px;font-size:13px;color:var(--mute);opacity:0;animation:kt-name .5s ease 1s forwards;}
-@keyframes kt-rule{to{width:min(420px,60vw)}}
-@keyframes kt-mark{from{opacity:0;letter-spacing:.9em}to{opacity:1;letter-spacing:.38em}}
+.kt-intro .box{position:relative;display:flex;flex-direction:column;align-items:center;padding:0 20px;}
+/* 일출: 엠블럼이 가로선(지평선) 아래에서 올라온다 — 선 위쪽만 보이게 .sun 이 잘라 낸다 */
+.kt-intro .halo{position:absolute;left:50%;top:var(--em);width:min(640px,96vw);height:calc(var(--em) * .95);transform:translate(-50%,-100%);
+  background:radial-gradient(ellipse 50% 100% at 50% 100%,rgba(122,162,255,.30),rgba(122,162,255,.08) 55%,transparent 75%);opacity:0;animation:kt-fade 1.5s ease .8s forwards;}
+/* 아래쪽만 자르고 좌우·위는 열어 둔다 — overflow:hidden 은 엠블럼 그림자를 네모로 잘라 상자가 비친다 */
+.kt-intro .sun{position:relative;width:var(--em);height:var(--em);clip-path:inset(-90px -90px 0 -90px);}
+.kt-intro .emb{position:absolute;inset:0;background:var(--logo) center/contain no-repeat;
+  filter:drop-shadow(0 0 26px rgba(122,162,255,.22));animation:kt-sunrise 1.35s cubic-bezier(.45,.05,.25,1) .8s both;}
+/* 금속 하이라이트는 한 번만 스친다 — 엠블럼 모양으로 잘라(mask) 선 밖으로 번지지 않게 */
+.kt-intro .emb::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.55) 50%,transparent 60%) 160% 0/260% 100% no-repeat;
+  -webkit-mask:var(--logo) center/contain no-repeat;mask:var(--logo) center/contain no-repeat;animation:kt-sheen 1s ease-in-out 2.1s forwards;}
+.kt-intro .rule{position:relative;height:1px;width:0;background:linear-gradient(90deg,transparent,rgba(160,184,255,.9) 22%,rgba(160,184,255,.9) 78%,transparent);animation:kt-rule 1s var(--ease) .25s forwards;}
+.kt-intro .rule::after{content:"";position:absolute;left:0;right:0;top:5px;height:6px;opacity:.7;
+  background:repeating-linear-gradient(90deg,rgba(142,155,176,.55) 0 1px,transparent 1px 26px);
+  -webkit-mask:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent);mask:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent);}
+.kt-intro .name{margin-top:30px;font-size:clamp(16px,2vw,22px);letter-spacing:.04em;color:var(--ink2);opacity:0;transform:translateY(10px);animation:kt-name .8s var(--ease) 2.3s forwards;}
+.kt-intro .skip{position:absolute;right:28px;bottom:24px;font-size:13px;color:var(--mute);opacity:0;animation:kt-name .5s ease .9s forwards;}
+@keyframes kt-rule{to{width:min(560px,76vw)}}
+/* 시작 값을 명시한다 — 생략하면 브라우저가 시작 시점의 요소 높이로 %를 계산해(CSS 로딩 순서에 따라 ≈0) 떠오르지 않고 제자리에 나타난다 */
+@keyframes kt-sunrise{from{transform:translateY(calc(var(--em) * 1.05))}to{transform:none}}
+@keyframes kt-sheen{to{background-position:-60% 0}}
 @keyframes kt-name{to{opacity:1;transform:none}}
+@keyframes kt-fade{to{opacity:1}}
 @keyframes kt-out{to{clip-path:inset(0 0 100% 0);visibility:hidden}}
 
 /* ── 히어로 ── */
@@ -240,9 +256,19 @@ def esc(x: object) -> str:
 
 
 # ── HTML 부품 ────────────────────────────────────────────────────
+def _emblem_data_uri() -> str:
+    """app/emblem.webp(배경 투명 처리본, scripts/make_emblem.py)를 CSS 변수로 심는다. 파일이 없으면 빈 문자열 → 엠블럼 없이 선·이름만 보인다."""
+    try:
+        return "data:image/webp;base64," + base64.b64encode((Path(__file__).parent / "emblem.webp").read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+
+
 def intro_html() -> str:
-    return ("<div class='kt-intro' role='presentation'><div class='box'><div class='rule'></div>"
-            "<div class='mark'>KITECH</div>"
+    logo = _emblem_data_uri()
+    style = f" style='--logo:url(\"{logo}\")'" if logo else ""
+    return (f"<div class='kt-intro' role='presentation'{style}><div class='box'><div class='halo'></div>"
+            "<div class='sun'><div class='emb'></div></div><div class='rule'></div>"
             f"<div class='name'>{esc(ORG_NAME)}</div></div><div class='skip'>건너뛰기 ›</div></div>")
 
 
