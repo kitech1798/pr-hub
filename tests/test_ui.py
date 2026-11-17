@@ -85,10 +85,10 @@ def test_intro_embeds_emblem_and_survives_missing_file(monkeypatch) -> None:
     """엠블럼은 data URI 로 심기고, 파일이 없어도 인트로(선·이름)는 깨지지 않는다."""
     m = ui.intro_html()
     assert "--logo:url(" in m and "data:image/webp;base64," in m and "\n" not in m
-    assert ui.ORG_NAME in m and "class='emb'" in m
+    assert all(line in m for line in ui.INTRO_NAME) and "class='emb'" in m and "<br>" in m
     monkeypatch.setattr(ui, "_emblem_data_uri", lambda: "")
     bare = ui.intro_html()
-    assert "--logo" not in bare and ui.ORG_NAME in bare
+    assert "--logo" not in bare and ui.INTRO_NAME[0] in bare
 
 
 def test_keyframe_names_are_unique() -> None:

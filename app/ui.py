@@ -25,6 +25,7 @@ NEG = "#64748B"           # 평균 이하
 # 채널색 — OKLCH L=.76 C=.12 로 명도·채도를 맞추고 색상(hue)만 벌렸다. 데이터에서만 쓴다.
 CHANNEL_COLORS = {"보도자료": "#EC9C63", "포토뉴스": "#BD9FF2", "유튜브": "#F290A2", "블로그": "#79C685"}
 ORG_NAME = "한국생산기술연구원 홍보 허브"
+INTRO_NAME = ("한국생산기술연구원", "홍보허브")   # 인트로만 두 줄·붙여쓰기(상시 표기는 ORG_NAME)
 
 _NOISE = ("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'>"
           "<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/>"
@@ -92,7 +93,7 @@ details{border-color:var(--line) !important;border-radius:var(--r) !important;}
 .kt-intro .rule::after{content:"";position:absolute;left:0;right:0;top:5px;height:6px;opacity:.7;
   background:repeating-linear-gradient(90deg,rgba(142,155,176,.55) 0 1px,transparent 1px 26px);
   -webkit-mask:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent);mask:linear-gradient(90deg,transparent,#000 25%,#000 75%,transparent);}
-.kt-intro .name{margin-top:30px;font-size:clamp(16px,2vw,22px);letter-spacing:.04em;color:var(--ink2);opacity:0;transform:translateY(10px);animation:kt-name .8s var(--ease) 2.3s forwards;}
+.kt-intro .name{text-align:center;margin-top:34px;font-size:clamp(24px,3vw,33px);line-height:1.35;font-weight:600;letter-spacing:.04em;color:var(--ink2);opacity:0;transform:translateY(10px);animation:kt-name .8s var(--ease) 2.3s forwards;}
 .kt-intro .skip{position:absolute;right:28px;bottom:24px;font-size:13px;color:var(--mute);opacity:0;animation:kt-name .5s ease .9s forwards;}
 @keyframes kt-rule{to{width:min(560px,76vw)}}
 /* 시작 값을 명시한다 — 생략하면 브라우저가 시작 시점의 요소 높이로 %를 계산해(CSS 로딩 순서에 따라 ≈0) 떠오르지 않고 제자리에 나타난다 */
@@ -269,7 +270,7 @@ def intro_html() -> str:
     style = f" style='--logo:url(\"{logo}\")'" if logo else ""
     return (f"<div class='kt-intro' role='presentation'{style}><div class='box'><div class='halo'></div>"
             "<div class='sun'><div class='emb'></div></div><div class='rule'></div>"
-            f"<div class='name'>{esc(ORG_NAME)}</div></div><div class='skip'>건너뛰기 ›</div></div>")
+            f"<div class='name'>{esc(INTRO_NAME[0])}<br>{esc(INTRO_NAME[1])}</div></div><div class='skip'>건너뛰기 ›</div></div>")
 
 
 def share_bar(counts: dict[str, int]) -> str:
